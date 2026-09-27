@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Calculadora de período sem conexão e dias de desconto.">
+  <title>Calculadora de desconto</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <p class="eyebrow">Ferramenta de atendimento</p>
+      <h1>Calculadora de desconto</h1>
+      <p>Apure o período sem conexão e registre a rastreabilidade do atendimento.</p>
+    </div>
+  </header>
+
+  <main class="container layout">
+    <section class="form-column" aria-label="Dados para cálculo">
+      <form id="discount-form">
+        <section class="card">
+          <h2>Período sem conexão</h2>
+          <p class="muted">Informe quando a conexão caiu e quando foi restabelecida.</p>
+          <div class="fields">
+            <div class="field">
+              <label for="disconnect">Data e hora da queda</label>
+              <input id="disconnect" name="disconnect" type="datetime-local" step="1" required>
+            </div>
+            <div class="field">
+              <label for="reconnect">Data e hora do retorno</label>
+              <input id="reconnect" name="reconnect" type="datetime-local" step="1" required>
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>Bloqueio financeiro</h2>
+          <p class="muted">Se houve bloqueio, registre o período. Ele não será somado ao desconto.</p>
+          <label class="checkbox-row" for="has-block">
+            <input id="has-block" name="has-block" type="checkbox">
+            <span>Cliente estava bloqueado financeiramente?</span>
+          </label>
+          <div id="block-fields" class="fields hidden">
+            <div class="field">
+              <label for="block-start">Início do bloqueio</label>
+              <input id="block-start" name="block-start" type="datetime-local" step="1">
+            </div>
+            <div class="field">
+              <label for="block-end">Fim do bloqueio</label>
+              <input id="block-end" name="block-end" type="datetime-local" step="1">
+            </div>
+          </div>
+          <div class="actions">
+            <button class="button button-primary" type="submit">Calcular desconto</button>
+            <button class="button button-secondary" id="reset-button" type="reset">Limpar</button>
+          </div>
+          <p id="error-message" class="error hidden" role="alert"></p>
+        </section>
+      </form>
+    </section>
+
+    <aside class="card result-card" aria-label="Resultado do cálculo">
+      <h2>Resultado</h2>
+      <p class="muted">O resumo será exibido após o cálculo.</p>
+      <p id="empty-state" class="empty-state">Preencha os horários e clique em “Calcular desconto”.</p>
+      <div id="result" class="hidden" aria-live="polite">
+        <div class="result-highlight">
+          <p class="result-label">Dias de desconto</p>
+          <p id="discount-days" class="result-number">0</p>
+          <p class="muted">dia(s) a conceder ao cliente</p>
+        </div>
+        <dl class="details">
+          <div><dt>Período sem conexão</dt><dd id="offline-duration"></dd></div>
+          <div><dt>Queda</dt><dd id="disconnect-output"></dd></div>
+          <div><dt>Retorno</dt><dd id="reconnect-output"></dd></div>
+          <div id="block-output" class="hidden">
+            <dt>Período de bloqueio financeiro (não descontado)</dt>
+            <dd id="block-duration"></dd>
+            <dd id="block-dates" class="muted"></dd>
+          </div>
+        </dl>
+        <p class="success-message">Cálculo concluído</p>
+        <button class="button button-secondary" id="copy-button" type="button">Copiar rastreabilidade</button>
+        <p id="copy-status" class="muted" aria-live="polite"></p>
+      </div>
+    </aside>
+  </main>
+  <footer class="site-footer">Calculadora local • Os dados são processados no navegador e não são enviados a um servidor.</footer>
+</body>
+</html>
