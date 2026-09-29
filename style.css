@@ -4,7 +4,7 @@
 
 body {
     margin: 0;
-    background: #101714;
+    background: #0b131a; /* Fundo escuro com tom levemente azulado para combinar com a marca */
     color: #e8f0eb;
     font: 16px/1.5 system-ui, sans-serif;
 }
@@ -16,8 +16,8 @@ body {
 }
 
 section {
-    background: #19231e;
-    border: 1px solid #304137;
+    background: #131f29; /* Fundo dos blocos em tom escuro alinhado ao tema */
+    border: 1px solid #1e3243;
     border-radius: 12px;
     padding: 20px;
     margin: 18px 0;
@@ -37,16 +37,16 @@ input {
     display: block;
     width: 100%;
     padding: 11px;
-    background: #0f1713;
+    background: #080e14;
     color: inherit;
-    border: 1px solid #46584c;
+    border: 1px solid #243b50;
     border-radius: 7px;
     margin-top: 6px;
     font: inherit;
 }
 
 input::placeholder {
-    color: #8c9b91;
+    color: #728a9e;
 }
 
 .grid,
@@ -61,7 +61,7 @@ input::placeholder {
 }
 
 .summary div {
-    background: #0f1713;
+    background: #080e14;
     padding: 13px;
     border-radius: 8px;
 }
@@ -70,18 +70,24 @@ input::placeholder {
     display: block;
     font-size: 1.4rem;
     margin-top: 6px;
+    color: #00d2ff; /* Destaque nos números usando o azul ciano da marca */
 }
 
 button {
     margin: 14px 0;
-    background: #9bd36b;
-    color: #10200e;
+    background: #00bfff; /* Azul vibrante característico da identidade visual */
+    color: #080e14;
     border: 0;
     border-radius: 8px;
     padding: 12px 18px;
     font: inherit;
     font-weight: bold;
     cursor: pointer;
+    transition: background 0.2s;
+}
+
+button:hover {
+    background: #0099cc;
 }
 
 button:disabled {
@@ -103,14 +109,18 @@ td,
 th {
     text-align: left;
     padding: 10px;
-    border-bottom: 1px solid #304137;
+    border-bottom: 1px solid #1e3243;
+}
+
+th {
+    color: #00d2ff;
 }
 
 small,
 footer,
 .note,
 #explanation {
-    color: #b8c7bd;
+    color: #9cb3c9;
 }
 
 .note {
