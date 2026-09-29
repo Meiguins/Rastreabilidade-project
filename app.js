@@ -5,7 +5,10 @@ const fileInput = document.querySelector("#pdfFile"),
       endInput = document.querySelector("#endDate"),
       button = document.querySelector("#calculateBtn"),
       statusEl = document.querySelector("#status"),
-      rowsEl = document.querySelector("#outageRows");
+      rowsEl = document.querySelector("#outageRows"),
+      copyBtn = document.querySelector("#copyResultBtn");
+
+let lastOutagesData = [];
 
 function updateButton() {
     button.disabled = !(fileInput.files.length && startInput.value && endInput.value);
@@ -148,6 +151,7 @@ function dur(ms) {
 }
 
 function render(outages) {
+    lastOutagesData = outages;
     const total = outages.reduce((n, o) => n + o.ms, 0),
           days = total ? Math.ceil(total / 86400000) : 0;
 
@@ -171,4 +175,38 @@ function render(outages) {
         });
         rowsEl.appendChild(tr);
     }
+}
+
+if (copyBtn) {
+    copyBtn.addEventListener("click", () => {
+        if (!lastOutagesData.length) {
+            alert("Não há resultados calculados para copiar.");
+            return;
+        }
+
+        const totalDurationText = document.querySelector("#totalDuration").textContent;
+        const discountDaysText = document.querySelector("#discountDays").textContent;
+        const outageCountText = document.querySelector("#outageCount").textContent;
+
+        let textoCopia = `*Relatório de Rastreabilidade e Desconto*\n`;
+        textoCopia += `• Tempo considerado: ${totalDurationText}\n`;
+        textoCopia += `• Dias de desconto: ${discountDaysText}\n`;
+        textoCopia += `• Quedas elegíveis: ${outageCountText}\n\n`;
+        textoCopia += `*Detalhamento das quedas:*\n`;
+
+        lastOutagesData.forEach((o, index) => {
+            textoCopia += `${index + 1}. Início: ${fmt(o.a)} | Fim: ${fmt(o.b)} | Motivo: ${o.reason} | Duração: ${dur(o.ms)}\n`;
+        });
+
+        navigator.clipboard.writeText(textoCopia).then(() => {
+            const originalText = copyBtn.textContent;
+            copyBtn.textContent = "✅ Copiado com sucesso!";
+            setTimeout(() => {
+                copyBtn.textContent = originalText;
+            }, 2000);
+        }).catch(err => {
+            console.error("Erro ao copiar:", err);
+            alert("Erro ao tentar copiar para a área de transferência.");
+        });
+    });
 }
