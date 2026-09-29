@@ -1,139 +1,147 @@
-// Lógica da Calculadora de Desconto — sem banco de dados ou armazenamento persistente.
-const $ = (id) => document.getElementById(id);
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 
-const form = $("discount-form");
-const hasBlock = $("has-block");
-const blockFields = $("block-fields");
-const result = $("result");
-const emptyState = $("empty-state");
-const errorMessage = $("error-message");
-let reportText = "";
+const fileInput = document.querySelector("#pdfFile"),
+      startInput = document.querySelector("#startDate"),
+      endInput = document.querySelector("#endDate"),
+      button = document.querySelector("#calculateBtn"),
+      statusEl = document.querySelector("#status"),
+      rowsEl = document.querySelector("#outageRows");
 
-function readDate(id) {
-  const value = $(id).value;
-  return value ? new Date(value) : null;
+function updateButton() {
+    button.disabled = !(fileInput.files.length && startInput.value && endInput.value);
 }
 
-function formatDate(date) {
-  return new Intl.DateTimeFormat("pt-BR", {
-    dateStyle: "short",
-    timeStyle: "medium"
-  }).format(date);
-}
+[fileInput, startInput, endInput].forEach(e => e.addEventListener("change", updateButton));
 
-function formatDuration(milliseconds) {
-  const totalSeconds = Math.floor(milliseconds / 1000);
-  const days = Math.floor(totalSeconds / 86400);
-  const hours = Math.floor((totalSeconds % 86400) / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  return `${days} dias, ${hours} horas, ${minutes} minutos e ${seconds} segundos`;
-}
+button.addEventListener("click", async () => {
+    try {
+        statusEl.textContent = "Lendo PDF…";
+        button.disabled = true;
 
-function showError(message) {
-  errorMessage.textContent = message;
-  errorMessage.classList.remove("hidden");
-}
+        const pdf = await pdfjsLib.getDocument({ data: await fileInput.files[0].arrayBuffer() }).promise;
+        let lines = [];
 
-function clearError() {
-  errorMessage.textContent = "";
-  errorMessage.classList.add("hidden");
-}
+        for (let p = 1; p <= pdf.numPages; p++) {
+            const page = await pdf.getPage(p),
+                  content = await page.getTextContent();
+            lines.push(...groupLines(content.items));
+        }
 
-function renderResult({ disconnect, reconnect, block }) {
-  const offlineMs = reconnect - disconnect;
-  const wholeDays = Math.floor(offlineMs / 86400000);
+        const sessions = extractSessions(lines);
+        if (!sessions.length) throw Error("Não encontrei sessões com motivo e data/hora. Confira se o PDF é o relatório detalhado esperado.");
 
-  const discountDays = wholeDays + (offlineMs % 86400000 > 0 ? 1 : 0);
+        const from = new Date(startInput.value),
+              to = new Date(endInput.value);
+        if (!Number.isFinite(+from) || !Number.isFinite(+to) || to <= from) throw Error("O fim do período deve ser posterior ao início.");
 
-  $("discount-days").textContent = discountDays;
-  $("offline-duration").textContent = formatDuration(offlineMs);
-  $("disconnect-output").textContent = formatDate(disconnect);
-  $("reconnect-output").textContent = formatDate(reconnect);
+        const outages = makeOutages(sessions, from, to);
+        render(outages);
+        statusEl.textContent = `Leitura concluída: ${sessions.length} sessões elegíveis identificadas.`;
 
-  $("block-output").classList.toggle("hidden", !block);
-  if (block) {
-    $("block-duration").textContent = formatDuration(block.end - block.start);
-    $("block-dates").textContent =
-      `Início: ${formatDate(block.start)} • Fim: ${formatDate(block.end)}`;
-  }
-
-  reportText =
-    `RASTREABILIDADE\n` +
-    `Queda: ${formatDate(disconnect)}\n` +
-    `Retorno: ${formatDate(reconnect)}\n` +
-    `Período sem conexão: ${formatDuration(offlineMs)}\n` +
-    (block
-      ? `Início do bloqueio financeiro: ${formatDate(block.start)}\n` +
-        `Fim do bloqueio financeiro: ${formatDate(block.end)}\n` +
-        `Período de bloqueio: ${formatDuration(block.end - block.start)}\n`
-      : "") +
-    `Conceder ${discountDays} DIAS DE DESCONTO AO CLIENTE.`;
-
-  emptyState.classList.add("hidden");
-  result.classList.remove("hidden");
-}
-
-hasBlock.addEventListener("change", () => {
-  blockFields.classList.toggle("hidden", !hasBlock.checked);
-  $("block-start").required = hasBlock.checked;
-  $("block-end").required = hasBlock.checked;
-});
-
-form.addEventListener("submit", (event) => {
-  event.preventDefault();
-  clearError();
-
-  const disconnect = readDate("disconnect");
-  const reconnect = readDate("reconnect");
-
-  if (!disconnect || !reconnect) {
-    showError("Informe a data e hora da queda e do retorno.");
-    return;
-  }
-  if (reconnect < disconnect) {
-    showError("A data de retorno não pode ser anterior à data de desconexão.");
-    return;
-  }
-
-  let block = null;
-  if (hasBlock.checked) {
-    const start = readDate("block-start");
-    const end = readDate("block-end");
-
-    if (!start || !end) {
-      showError("Informe o início e o fim do bloqueio financeiro.");
-      return;
+    } catch (e) {
+        statusEl.textContent = e.message || "Erro ao ler PDF.";
+        rowsEl.innerHTML = '<tr><td colspan="4">Não foi possível calcular. Confira o arquivo.</td></tr>';
+    } finally {
+        updateButton();
     }
-    if (end < start) {
-      showError("O término do bloqueio não pode ser anterior ao início.");
-      return;
+});
+
+function groupLines(items) {
+    const a = items.filter(i => i.str && i.str.trim())
+                   .map(i => ({ s: i.str.trim(), x: i.transform[4], y: i.transform[5] }))
+                   .sort((a, b) => Math.abs(a.y - b.y) > 2 ? b.y - a.y : a.x - b.x),
+          lines = [];
+
+    for (const it of a) {
+        let l = lines.find(v => Math.abs(v.y - it.y) <= 2.2);
+        if (!l) {
+            l = { y: it.y, a: [] };
+            lines.push(l);
+        }
+        l.a.push(it);
     }
-    block = { start, end };
-  }
+    return lines.map(l => l.a.sort((a, b) => a.x - b.x).map(i => i.s).join(" "));
+}
 
-  renderResult({ disconnect, reconnect, block });
-});
+const dateRe = /(\d{2}\/\d{2}\/\d{4})\s+(\d{2}:\d{2}:\d{2})/g;
 
-form.addEventListener("reset", () => {
-  // O reset nativo atualiza os campos depois deste evento.
-  window.setTimeout(() => {
-    clearError();
-    blockFields.classList.add("hidden");
-    result.classList.add("hidden");
-    emptyState.classList.remove("hidden");
-    $("copy-status").textContent = "";
-    reportText = "";
-  }, 0);
-});
+function dateOf(d, t) {
+    const [dd, mm, yy] = d.split("/").map(Number),
+          [h, m, s] = t.split(":").map(Number);
+    return new Date(yy, mm - 1, dd, h, m, s);
+}
 
-$("copy-button").addEventListener("click", async () => {
-  if (!reportText) return;
-  try {
-    await navigator.clipboard.writeText(reportText);
-    $("copy-status").textContent = "Rastreabilidade copiada.";
-  } catch {
-    $("copy-status").textContent =
-      "Não foi possível copiar automaticamente. Copie os dados exibidos manualmente.";
-  }
-});
+function extractSessions(lines) {
+    const out = [];
+    for (const line0 of lines) {
+        const line = line0.replace(/\s+/g, " ").trim();
+        if (!/Lost-Carrier|NAS-Request/i.test(line)) continue;
+        
+        const ds = [...line.matchAll(dateRe)];
+        if (!ds.length) continue;
+
+        const start = dateOf(ds[0][1], ds[0][2]),
+              end = ds.length > 1 ? dateOf(ds[1][1], ds[1][2]) : null;
+        
+        if (!Number.isFinite(+start)) continue;
+
+        out.push({ start, end, reason: /Lost-Carrier/i.test(line) ? "Lost-Carrier" : "NAS-Request" });
+    }
+    return out.sort((a, b) => a.start - b.start);
+}
+
+function makeOutages(sessions, from, to) {
+    const out = [];
+    for (let i = 0; i < sessions.length; i++) {
+        const s = sessions[i];
+        if (!s.end || s.end <= s.start) continue;
+
+        const next = sessions.slice(i + 1).find(x => x.start > s.end);
+        if (!next) continue;
+
+        const a = new Date(Math.max(+s.end, +from)),
+              b = new Date(Math.min(+next.start, +to));
+        
+        if (b > a) out.push({ a, b, reason: s.reason, ms: b - a });
+    }
+    return out;
+}
+
+function fmt(d) {
+    return new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "medium" }).format(d);
+}
+
+function dur(ms) {
+    let s = Math.floor(ms / 1000),
+        d = Math.floor(s / 86400),
+        h = Math.floor(s % 86400 / 3600),
+        m = Math.floor(s % 3600 / 60),
+        sec = s % 60;
+    return (d ? d + "d " : "") + h + "h " + m + "min " + sec + "s";
+}
+
+function render(outages) {
+    const total = outages.reduce((n, o) => n + o.ms, 0),
+          days = total ? Math.ceil(total / 86400000) : 0;
+
+    document.querySelector("#totalDuration").textContent = dur(total);
+    document.querySelector("#discountDays").textContent = days;
+    document.querySelector("#outageCount").textContent = outages.length;
+    document.querySelector("#explanation").textContent = "As durações são somadas e arredondadas para cima uma única vez. Só é contado o trecho dentro do período escolhido.";
+
+    rowsEl.innerHTML = "";
+    if (!outages.length) {
+        rowsEl.innerHTML = '<tr><td colspan="4">Nenhuma queda elegível identificada no intervalo.</td></tr>';
+        return;
+    }
+
+    for (const o of outages) {
+        const tr = document.createElement("tr");
+        [fmt(o.a), fmt(o.b), o.reason, dur(o.ms)].forEach(v => {
+            const td = document.createElement("td");
+            td.textContent = v;
+            tr.appendChild(td);
+        });
+        rowsEl.appendChild(tr);
+    }
+}
