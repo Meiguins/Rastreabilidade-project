@@ -66,7 +66,6 @@ function groupLines(items) {
     return lines.map(l => l.a.sort((a, b) => a.x - b.x).map(i => i.s).join(" "));
 }
 
-// Regex robusto para capturar datas no formato DD/MM/AAAA HH:mm:ss ou DD/MM/AAAA HH:mm
 const dateRe = /(\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}(?::\d{2})?)/g;
 
 function parseCustomDate(str) {
@@ -82,11 +81,8 @@ function parseCustomDate(str) {
 
 function extractSessions(lines) {
     const out = [];
-    // Junta todas as linhas em um texto contínuo para facilitar a varredura dos blocos de conexão
     const fullText = lines.join(" ");
 
-    // Padrão do relatório IXC: busca blocos que contenham datas de início, fim e o motivo da desconexão
-    // Exemplo no PDF: 21/08/2026 10:14:13 ... 22/08/2026 09:46:16 ... Lost-Carrier
     const sessionRegex = /(\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}:\d{2})\s+(\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}:\d{2})[\s\S]*?(Lost-Carrier|NAS-Request|User-Request|Admin-Reset)/gi;
 
     let match;
@@ -100,9 +96,7 @@ function extractSessions(lines) {
         }
     }
 
-    // Fallback alternativo caso o regex linear encontre quebras diferentes no PDF
     if (!out.length) {
-        // Tenta varrer linha por linha extraindo todas as datas encontradas na mesma linha
         for (const line of lines) {
             const matches = [...line.matchAll(dateRe)];
             if (matches.length >= 2) {
@@ -127,11 +121,9 @@ function extractSessions(lines) {
 function makeOutages(sessions, from, to) {
     const out = [];
     for (const s of sessions) {
-        // Considera apenas motivos válidos (Lost-Carrier e NAS-Request conforme regra da interface)
         if (!/Lost-Carrier|NAS-Request/i.test(s.reason)) continue;
         if (s.end <= s.start) continue;
 
-        // Filtra apenas o trecho que se intercepta com o período de consulta (from ~ to)
         const a = new Date(Math.max(+s.start, +from)),
               b = new Date(Math.min(+s.end, +to));
         
