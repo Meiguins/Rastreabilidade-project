@@ -36,12 +36,17 @@ label {
 input {
     display: block;
     width: 100%;
-    padding: 10px;
+    padding: 11px;
     background: #0f1713;
     color: inherit;
     border: 1px solid #46584c;
     border-radius: 7px;
-    margin-top: 5px;
+    margin-top: 6px;
+    font: inherit;
+}
+
+input::placeholder {
+    color: #8c9b91;
 }
 
 .grid,
@@ -76,10 +81,12 @@ button {
     padding: 12px 18px;
     font: inherit;
     font-weight: bold;
+    cursor: pointer;
 }
 
 button:disabled {
     opacity: .5;
+    cursor: not-allowed;
 }
 
 .table-wrap {
@@ -101,8 +108,13 @@ th {
 
 small,
 footer,
+.note,
 #explanation {
     color: #b8c7bd;
+}
+
+.note {
+    font-size: .92rem;
 }
 
 footer {

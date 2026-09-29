@@ -10,26 +10,28 @@
 <body>
     <main class="container">
         <h1>Calculadora de desconto</h1>
-        <p>Leia o relatório de conexões em PDF e calcule quedas no período selecionado.</p>
+        <p>Importe o relatório PDF e informe o intervalo no formato brasileiro.</p>
         
         <section>
             <h2>1. PDF e período</h2>
-            <label>
-                Relatório PDF
-                <input id="pdfFile" type="file" accept="application/pdf">
-            </label>
+            <label for="pdfFile">Relatório PDF</label>
+            <input id="pdfFile" type="file" accept="application/pdf">
+            
             <div class="grid">
-                <label>
-                    Início
-                    <input id="startDate" type="datetime-local">
+                <label for="startDate">
+                    Início do período
+                    <input id="startDate" type="text" inputmode="numeric" autocomplete="off" placeholder="DD/MM/AAAA HH:mm" aria-describedby="dateHelp">
                 </label>
-                <label>
-                    Fim
-                    <input id="endDate" type="datetime-local">
+                <label for="endDate">
+                    Fim do período
+                    <input id="endDate" type="text" inputmode="numeric" autocomplete="off" placeholder="DD/MM/AAAA HH:mm">
                 </label>
             </div>
+            
+            <p id="dateHelp" class="note">Digite ou cole no padrão DD/MM/AAAA HH:mm, por exemplo: 14/09/2026 07:12. Segundos são opcionais.</p>
+            
             <button id="calculateBtn" disabled>Calcular desconto</button>
-            <p id="status"></p>
+            <p id="status" role="status"></p>
             <small>Processamento local no navegador; o PDF não é enviado nem salvo.</small>
         </section>
 

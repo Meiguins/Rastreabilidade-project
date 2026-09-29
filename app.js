@@ -28,15 +28,18 @@ button.addEventListener("click", async () => {
         }
 
         const sessions = extractSessions(lines);
-        if (!sessions.length) throw Error("Não encontrei sessões com motivo e data/hora. Confira se o PDF é o relatório detalhado esperado.");
+        if (!sessions.length) throw Error("Não encontrei sessões com o padrão esperado neste relatório. Verifique se o arquivo está correto.");
 
-        const from = new Date(startInput.value),
-              to = new Date(endInput.value);
-        if (!Number.isFinite(+from) || !Number.isFinite(+to) || to <= from) throw Error("O fim do período deve ser posterior ao início.");
+        const from = parseCustomDate(startInput.value),
+              to = parseCustomDate(endInput.value);
+        
+        if (!Number.isFinite(+from) || !Number.isFinite(+to) || to <= from) {
+            throw Error("O fim do período deve ser posterior ao início.");
+        }
 
         const outages = makeOutages(sessions, from, to);
         render(outages);
-        statusEl.textContent = `Leitura concluída: ${sessions.length} sessões elegíveis identificadas.`;
+        statusEl.textContent = `Leitura concluída: ${sessions.length} sessões identificadas no total.`;
 
     } catch (e) {
         statusEl.textContent = e.message || "Erro ao ler PDF.";
@@ -63,46 +66,78 @@ function groupLines(items) {
     return lines.map(l => l.a.sort((a, b) => a.x - b.x).map(i => i.s).join(" "));
 }
 
-const dateRe = /(\d{2}\/\d{2}\/\d{4})\s+(\d{2}:\d{2}:\d{2})/g;
+// Regex robusto para capturar datas no formato DD/MM/AAAA HH:mm:ss ou DD/MM/AAAA HH:mm
+const dateRe = /(\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}(?::\d{2})?)/g;
 
-function dateOf(d, t) {
-    const [dd, mm, yy] = d.split("/").map(Number),
-          [h, m, s] = t.split(":").map(Number);
+function parseCustomDate(str) {
+    const parts = str.trim().split(" ");
+    if (parts.length < 2) return new Date(NaN);
+    const [dd, mm, yy] = parts[0].split("/").map(Number);
+    const timeParts = parts[1].split(":").map(Number);
+    const h = timeParts[0] || 0;
+    const m = timeParts[1] || 0;
+    const s = timeParts[2] || 0;
     return new Date(yy, mm - 1, dd, h, m, s);
 }
 
 function extractSessions(lines) {
     const out = [];
-    for (const line0 of lines) {
-        const line = line0.replace(/\s+/g, " ").trim();
-        if (!/Lost-Carrier|NAS-Request/i.test(line)) continue;
-        
-        const ds = [...line.matchAll(dateRe)];
-        if (!ds.length) continue;
+    // Junta todas as linhas em um texto contínuo para facilitar a varredura dos blocos de conexão
+    const fullText = lines.join(" ");
 
-        const start = dateOf(ds[0][1], ds[0][2]),
-              end = ds.length > 1 ? dateOf(ds[1][1], ds[1][2]) : null;
-        
-        if (!Number.isFinite(+start)) continue;
+    // Padrão do relatório IXC: busca blocos que contenham datas de início, fim e o motivo da desconexão
+    // Exemplo no PDF: 21/08/2026 10:14:13 ... 22/08/2026 09:46:16 ... Lost-Carrier
+    const sessionRegex = /(\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}:\d{2})\s+(\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}:\d{2})[\s\S]*?(Lost-Carrier|NAS-Request|User-Request|Admin-Reset)/gi;
 
-        out.push({ start, end, reason: /Lost-Carrier/i.test(line) ? "Lost-Carrier" : "NAS-Request" });
+    let match;
+    while ((match = sessionRegex.exec(fullText)) !== null) {
+        const start = parseCustomDate(match[1]);
+        const end = parseCustomDate(match[2]);
+        const reason = match[3];
+
+        if (Number.isFinite(+start) && Number.isFinite(+end)) {
+            out.push({ start, end, reason });
+        }
     }
+
+    // Fallback alternativo caso o regex linear encontre quebras diferentes no PDF
+    if (!out.length) {
+        // Tenta varrer linha por linha extraindo todas as datas encontradas na mesma linha
+        for (const line of lines) {
+            const matches = [...line.matchAll(dateRe)];
+            if (matches.length >= 2) {
+                const start = parseCustomDate(matches[0][1]);
+                const end = parseCustomDate(matches[1][1]);
+                let reason = "Desconhecido";
+                if (/Lost-Carrier/i.test(line)) reason = "Lost-Carrier";
+                else if (/NAS-Request/i.test(line)) reason = "NAS-Request";
+                else if (/User-Request/i.test(line)) reason = "User-Request";
+                else if (/Admin-Reset/i.test(line)) reason = "Admin-Reset";
+
+                if (Number.isFinite(+start) && Number.isFinite(+end)) {
+                    out.push({ start, end, reason });
+                }
+            }
+        }
+    }
+
     return out.sort((a, b) => a.start - b.start);
 }
 
 function makeOutages(sessions, from, to) {
     const out = [];
-    for (let i = 0; i < sessions.length; i++) {
-        const s = sessions[i];
-        if (!s.end || s.end <= s.start) continue;
+    for (const s of sessions) {
+        // Considera apenas motivos válidos (Lost-Carrier e NAS-Request conforme regra da interface)
+        if (!/Lost-Carrier|NAS-Request/i.test(s.reason)) continue;
+        if (s.end <= s.start) continue;
 
-        const next = sessions.slice(i + 1).find(x => x.start > s.end);
-        if (!next) continue;
-
-        const a = new Date(Math.max(+s.end, +from)),
-              b = new Date(Math.min(+next.start, +to));
+        // Filtra apenas o trecho que se intercepta com o período de consulta (from ~ to)
+        const a = new Date(Math.max(+s.start, +from)),
+              b = new Date(Math.min(+s.end, +to));
         
-        if (b > a) out.push({ a, b, reason: s.reason, ms: b - a });
+        if (b > a) {
+            out.push({ a, b, reason: s.reason, ms: b - a });
+        }
     }
     return out;
 }
@@ -127,11 +162,11 @@ function render(outages) {
     document.querySelector("#totalDuration").textContent = dur(total);
     document.querySelector("#discountDays").textContent = days;
     document.querySelector("#outageCount").textContent = outages.length;
-    document.querySelector("#explanation").textContent = "As durações são somadas e arredondadas para cima uma única vez. Só é contado o trecho dentro do período escolhido.";
+    document.querySelector("#explanation").textContent = "As durações são somadas e filtradas considerando apenas os motivos elegíveis dentro do período escolhido.";
 
     rowsEl.innerHTML = "";
     if (!outages.length) {
-        rowsEl.innerHTML = '<tr><td colspan="4">Nenhuma queda elegível identificada no intervalo.</td></tr>';
+        rowsEl.innerHTML = '<tr><td colspan="4">Nenhuma queda elegível (Lost-Carrier / NAS-Request) identificada no intervalo.</td></tr>';
         return;
     }
 
