@@ -35,7 +35,7 @@ button.addEventListener("click", async () => {
 
         const from = parseCustomDate(startInput.value),
               to = parseCustomDate(endInput.value);
-        
+
         if (!Number.isFinite(+from) || !Number.isFinite(+to) || to <= from) {
             throw Error("O fim do período deve ser posterior ao início.");
         }
@@ -54,8 +54,8 @@ button.addEventListener("click", async () => {
 
 function groupLines(items) {
     const a = items.filter(i => i.str && i.str.trim())
-                   .map(i => ({ s: i.str.trim(), x: i.transform[4], y: i.transform[5] }))
-                   .sort((a, b) => Math.abs(a.y - b.y) > 2 ? b.y - a.y : a.x - b.x),
+                    .map(i => ({ s: i.str.trim(), x: i.transform[4], y: i.transform[5] }))
+                    .sort((a, b) => Math.abs(a.y - b.y) > 2 ? b.y - a.y : a.x - b.x),
           lines = [];
 
     for (const it of a) {
@@ -123,17 +123,37 @@ function extractSessions(lines) {
 
 function makeOutages(sessions, from, to) {
     const out = [];
-    for (const s of sessions) {
-        if (!/Lost-Carrier|NAS-Request/i.test(s.reason)) continue;
-        if (s.end <= s.start) continue;
 
-        const a = new Date(Math.max(+s.start, +from)),
-              b = new Date(Math.min(+s.end, +to));
-        
-        if (b > a) {
-            out.push({ a, b, reason: s.reason, ms: b - a });
+    // Assegura a ordenação cronológica das sessões
+    const sorted = [...sessions].sort((a, b) => a.start - b.start);
+
+    // Compara cada sessão com a próxima para encontrar o tempo offline
+    for (let i = 0; i < sorted.length - 1; i++) {
+        const currentSession = sorted[i];
+        const nextSession = sorted[i + 1];
+
+        // Processa apenas se o encerramento da sessão atual ocorreu por motivo elegível
+        if (!/Lost-Carrier|NAS-Request/i.test(currentSession.reason)) continue;
+
+        const dropTime = currentSession.end;    // Horário em que caiu
+        const returnTime = nextSession.start;   // Horário em que voltou (início da próx. sessão)
+
+        // Se a reconexão for posterior à queda, há tempo de indisponibilidade
+        if (returnTime > dropTime) {
+            const a = new Date(Math.max(+dropTime, +from));
+            const b = new Date(Math.min(+returnTime, +to));
+
+            if (b > a) {
+                out.push({
+                    a,
+                    b,
+                    reason: currentSession.reason,
+                    ms: b - a
+                });
+            }
         }
     }
+
     return out;
 }
 
